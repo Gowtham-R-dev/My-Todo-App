@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo App</title>
+    <link rel="stylesheet" href="/public/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script>
+        let currentEditId = null;
+        let deleteId = null;
+
+        async function sendTodo(event) {
+            event.preventDefault();
+            const content = document.getElementById('content').value;
+
+            if (currentEditId) {
+                const response = await fetch(`/todos/${currentEditId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content }),
+                });
+
+                document.getElementById('result').innerText = response.ok
+                    ? 'Todo updated successfully!'
+                    : `Error: ${(await response.json()).error}`;
+
+            } else {
+                const response = await fetch('/todos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content }),
+                });
+
+                document.getElementById('result').innerText = response.ok
+                    ? 'Todo added successfully!'
+                    : `Error: ${(await response.json()).error}`;
+
+                // Trigger expolsion
+                if (response.ok){
+                    launchConfetti();
+                }
+            }
+
+            document.getElementById('content').value = '';
+            currentEditId = null;
+            fetchTodos(); // Refresh the todo list
+            updateButton(); // Reset button text
+        }
+
+        function launchConfetti() {
+            // Trigger confetti effect
+            const duration = 3 * 1000; // Duration of the confetti effect
+            const animationEnd = Date.now() + duration;
+            const defaults = {
+                startVelocity: 30,
+                spread: 360,
+                ticks: 60,
+                zIndex: 1000,
+            };
+            function animate() {
+                const timeLeft = animationEnd - Date.now();
+                if (timeLeft <= 0) return;
+                
+                const particleCount = 50 * (timeLeft / duration);
+                // Configure the confetti origin to explode from bottom corners
+                const cornerOrigins = [
+                    { x: 0, y: 0.9 }, // Bottom-left corner
+                    { x: 1, y: 0.9 },  // Bottom-right corner
+                    { x: 1, y: 0.1 },  // Top-right corner
+                    { x: 0, y: 0.1}  // Top-left corner
+                ];
+                // Loop through both corners to generate confetti from each
+                cornerOrigins.forEach(origin => {
+                    confetti({
+                        ...defaults,
+                        particleCount: Math.floor(particleCount / cornerOrigins.length), // Divide particles between corners
+                        origin: origin
+                    });
+                });
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        async function fetchTodos() {
+            const response = await fetch('/todos');
+            if (!response.ok) {
+                console.error('Failed to fetch todos:', response.status);
+                return;
+            }
+            const todos = await response.json();
+            const todoTableBody = document.getElementById('todoTableBody');
+
+            // Clear the current table rows
+            todoTableBody.innerHTML = '';
+
+            // Populate the table with fetched todos
+            todos.forEach((todo, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${todo.content}</td>
+                    <td>
+                        <button class="editBtn" onclick="editTodo('${todo.id}', '${todo.content}')">✏️</button>
+                        <button class="deleteBtn" onclick="openDeleteDialog('${todo.id}')">❌</button>
+                    </td>
+                `;
+                todoTableBody.appendChild(row);
+            });
+        }
+
+        async function editTodo(id, content) {
+            currentEditId = id;
+            document.getElementById('content').value = content;
+            document.getElementById('submitBtn').innerText = 'Update';
+            
+        }
+
+        function updateButton() {
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.innerText = currentEditId ? 'Update' : 'Add Todo';
+        }
+
+        function openDeleteDialog(id) {
+            deleteId = id;
+            document.getElementById('deleteDialog').style.display = 'flex';
+        }
+
+        function closeDeleteDialog() {
+            document.getElementById('deleteDialog').style.display = 'none';
+        }
+
+        async function deleteTodo() {
+            const response = await fetch(`/todos/${deleteId}`, {
+                method: 'DELETE',
+            });
+
+            document.getElementById('result').innerText = response.ok
+                ? 'Todo deleted successfully!'
+                : `Error: ${(await response.json()).error}`;
+
+            fetchTodos(); // Refresh the todo list
+            closeDeleteDialog();
+
+        }
+
+        // Fetch todos on page load
+        window.onload = fetchTodos;
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Todo App</h1>
+        <div class="form-container">
+            <form onsubmit="sendTodo(event)" class="todo-form">
+                <div class="form-group">
+                    <input type="text" id="content" required placeholder=" " />
+                    <label class="floating-label" for="content">Add your task here...</label>
+                </div>
+                <button type="submit" id="submitBtn" class="add-btn">Add Todo</button>
+            </form>
+            <div id="result"></div>
+        </div>
+
+        <h2>Todo List</h2>
+        <div class="list-container">
+            <div class="scrollable-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Content</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="todoTableBody">
+                        <!-- Todos will be dynamically populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteDialog" class="dialog">
+        <div class="dialog-content">
+            <h3>Confirm Deletion</h3>
+            <p>Are you sure you want to delete this todo?</p>
+            <button onclick="deleteTodo()">Yes</button>
+            <button onclick="closeDeleteDialog()">No</button>
+        </div>
+    </div>
+</body>
+</html>
